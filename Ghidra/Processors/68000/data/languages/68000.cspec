@@ -75,5 +75,30 @@
       </killedbycall>
     </prototype>
   </default_proto>
+  <prototype name="syscall" extrapop="0" stackshift="0">
+    <input>
+      <pentry minsize="1" maxsize="500" align="2">
+        <addr offset="0" space="stack"/>
+      </pentry>
+    </input>
+    <output>
+      <pentry minsize="1" maxsize="500" align="2">
+        <addr offset="0" space="stack"/>
+      </pentry>
+    </output>
+    <unaffected>
+      <register name="D2"/>
+      <register name="D3"/>
+      <register name="D4"/>
+      <register name="D5"/>
+      <register name="D6"/>
+      <register name="D7"/>
+      <register name="A2"/>
+      <register name="A3"/>
+      <register name="A4"/>
+      <register name="A5"/>
+      <register name="A6"/>
+    </unaffected>
+  </prototype>
   
 </compiler_spec>
