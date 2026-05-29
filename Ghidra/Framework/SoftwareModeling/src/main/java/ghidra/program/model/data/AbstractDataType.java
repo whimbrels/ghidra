@@ -16,12 +16,12 @@
 package ghidra.program.model.data;
 
 import java.util.Collection;
+import java.util.Collections;
 
 import ghidra.docking.settings.Settings;
 import ghidra.program.model.mem.MemBuffer;
 import ghidra.util.InvalidNameException;
 import ghidra.util.UniversalID;
-import ghidra.util.exception.DuplicateNameException;
 
 /**
  * Base class for DataType classes. Many of the DataType methods are stubbed out so simple datatype
@@ -29,7 +29,7 @@ import ghidra.util.exception.DuplicateNameException;
  */
 public abstract class AbstractDataType implements DataType {
 
-	private final static TypeDefSettingsDefinition[] EMPTY_TYPEDEF_DEFINITIONS =
+	protected final static TypeDefSettingsDefinition[] EMPTY_TYPEDEF_DEFINITIONS =
 		new TypeDefSettingsDefinition[0];
 
 	protected String name;
@@ -183,7 +183,7 @@ public abstract class AbstractDataType implements DataType {
 	@Override
 	public Collection<DataType> getParents() {
 		// not-applicable
-		return null;
+		return Collections.emptyList();
 	}
 
 	@Override

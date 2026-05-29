@@ -80,8 +80,8 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.program.util.*;
 import ghidra.trace.model.Lifespan;
 import ghidra.trace.model.TraceLocation;
-import ghidra.trace.model.breakpoint.TraceBreakpoint;
-import ghidra.trace.model.breakpoint.TraceBreakpointKind;
+import ghidra.trace.model.breakpoint.TraceBreakpointKind.CommonSet;
+import ghidra.trace.model.breakpoint.TraceBreakpointLocation;
 import ghidra.trace.model.listing.TraceData;
 import ghidra.trace.model.memory.TraceMemorySpace;
 import ghidra.trace.model.thread.TraceThread;
@@ -831,7 +831,7 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		try (Transaction tx = tb.startTransaction()) {
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "capture return value");
+						CommonSet.SWX.kinds(), true, "capture return value");
 		}
 
 		EmulationResult result = emuService.run(atSetup.getPlatform(), atSetup.getTime(), monitor,
@@ -888,14 +888,14 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		waitOn(frameAtSetup.setReturnAddress(editor, tb.addr(0xdeadbeef)));
 		waitForTasks();
 
-		TraceBreakpoint bptUnwind;
+		TraceBreakpointLocation bptUnwind;
 		try (Transaction tx = tb.startTransaction()) {
 			bptUnwind = tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[1]", Lifespan.nowOn(0), tb.addr(0xdeadbeef),
-						Set.of(), Set.of(TraceBreakpointKind.SW_EXECUTE), true,
+						Set.of(), CommonSet.SWX.kinds(), true,
 						"capture return value");
 		}
 
@@ -976,11 +976,11 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		Register sp = program.getCompilerSpec().getStackPointer();
 		long spAtSetup = regs.getValue(0, sp).getUnsignedValue().longValueExact();
 
-		TraceBreakpoint bptUnwind;
+		TraceBreakpointLocation bptUnwind;
 		try (Transaction tx = tb.startTransaction()) {
 			bptUnwind = tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), entry, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 			bptUnwind.setEmuSleigh(0, """
 					if (%s >= 0x%x) goto <skip>;
 					  emu_swi();
@@ -1121,7 +1121,7 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		try (Transaction tx = tb.startTransaction()) {
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 		}
 
 		EmulationResult result = emuService.run(atSetup.getPlatform(), atSetup.getTime(), monitor,
@@ -1161,7 +1161,7 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		try (Transaction tx = tb.startTransaction()) {
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 		}
 
 		DebuggerCoordinates atSetup = traceManager.getCurrent();
@@ -1202,7 +1202,7 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		try (Transaction tx = tb.startTransaction()) {
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 		}
 
 		DebuggerCoordinates atSetup = traceManager.getCurrent();
@@ -1243,7 +1243,7 @@ public class StackUnwinderTest extends AbstractGhidraHeadedDebuggerTest {
 		try (Transaction tx = tb.startTransaction()) {
 			tb.trace.getBreakpointManager()
 					.addBreakpoint("Breakpoints[0]", Lifespan.nowOn(0), retInstr, Set.of(),
-						Set.of(TraceBreakpointKind.SW_EXECUTE), true, "unwind stack");
+						CommonSet.SWX.kinds(), true, "unwind stack");
 		}
 
 		DebuggerCoordinates atSetup = traceManager.getCurrent();

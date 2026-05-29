@@ -16,7 +16,6 @@
 package ghidra.program.database.symbol;
 
 import db.DBRecord;
-import ghidra.program.database.DBObjectCache;
 import ghidra.program.database.external.ExternalManagerDB;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.CodeUnit;
@@ -24,37 +23,22 @@ import ghidra.program.model.listing.Data;
 import ghidra.program.model.symbol.*;
 import ghidra.program.util.LabelFieldLocation;
 import ghidra.program.util.ProgramLocation;
+import ghidra.util.Lock.Closeable;
 
 /**
- * Symbols that represent "labels"
- *
- * Symbol data usage:
- *   EXTERNAL:
- *   	String stringData - external memory address/label
+ * Symbols that represent "labels" or external data locations
  */
-public class CodeSymbol extends SymbolDB {
+public class CodeSymbol extends MemorySymbol {
 
 	/**
 	 * Constructs a new CodeSymbol
 	 * @param mgr the symbol manager
-	 * @param cache symbol object cache
 	 * @param addr the address associated with the symbol
 	 * @param record the record for this symbol
+	 * @param key the database id to use as the object's database key
 	 */
-	public CodeSymbol(SymbolManager mgr, DBObjectCache<SymbolDB> cache, Address addr,
-			DBRecord record) {
-		super(mgr, cache, addr, record);
-	}
-
-	/**
-	 * Constructs a new CodeSymbol for a default/dynamic label.
-	 * @param mgr the symbol manager
-	 * @param cache symbol object cache
-	 * @param addr the address associated with the symbol
-	 * @param key this must be the absolute encoding of addr
-	 */
-	public CodeSymbol(SymbolManager mgr, DBObjectCache<SymbolDB> cache, Address addr, long key) {
-		super(mgr, cache, addr, key);
+	CodeSymbol(SymbolManager mgr, Address addr, DBRecord record, long key) {
+		super(mgr, addr, record, key);
 	}
 
 	@Override
@@ -75,11 +59,6 @@ public class CodeSymbol extends SymbolDB {
 	}
 
 	@Override
-	public boolean isExternal() {
-		return address.isExternalAddress();
-	}
-
-	@Override
 	public boolean delete() {
 		boolean keepReferences = !isExternal();
 		return delete(keepReferences);
@@ -93,38 +72,18 @@ public class CodeSymbol extends SymbolDB {
 	 * @return true if symbol successfully removed
 	 */
 	public boolean delete(boolean keepReferences) {
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			if (!keepReferences) {
 				symbolMgr.getReferenceManager().removeAllReferencesTo(getAddress());
 			}
 			return super.delete();
 		}
-		finally {
-			lock.release();
-		}
-	}
-
-	@Override
-	public boolean isPinned() {
-		if (!isExternal()) {
-			return doIsPinned();
-		}
-		return false;
-	}
-
-	@Override
-	public void setPinned(boolean pinned) {
-		if (!isExternal()) {
-			doSetPinned(pinned);
-		}
 	}
 
 	@Override
 	public Object getObject() {
-		lock.acquire();
-		try {
-			if (!checkIsValid()) {
+		try (Closeable c = lock.read()) {
+			if (!refreshIfNeeded()) {
 				return null;
 			}
 			if (isExternal()) {
@@ -141,11 +100,8 @@ public class CodeSymbol extends SymbolDB {
 					return data != null ? data : cu;
 				}
 			}
+			return null;
 		}
-		finally {
-			lock.release();
-		}
-		return null;
 	}
 
 	@Override
@@ -158,8 +114,7 @@ public class CodeSymbol extends SymbolDB {
 
 	@Override
 	public boolean setPrimary() {
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			if (address.isExternalAddress()) { // can't set primary on external locations
 				return false;
 			}
@@ -182,9 +137,6 @@ public class CodeSymbol extends SymbolDB {
 			setPrimary(true);
 			symbolMgr.primarySymbolSet(this, oldPrimarySymbol);
 			return true;
-		}
-		finally {
-			lock.release();
 		}
 	}
 
@@ -219,10 +171,14 @@ public class CodeSymbol extends SymbolDB {
 			}
 			return source;
 		}
-		if (newName == null || newName.length() == 0 || SymbolUtilities.isReservedDynamicLabelName(
-			newName, symbolMgr.getProgram().getAddressFactory())) {
+		if (newName == null || newName.length() == 0 || SymbolUtilities
+				.isReservedDynamicLabelName(newName, symbolMgr.getProgram().getAddressFactory())) {
 			return SourceType.DEFAULT;
 		}
 		return source;
+	}
+
+	void setIsValid() {
+		super.setValid();
 	}
 }

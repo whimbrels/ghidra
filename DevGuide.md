@@ -41,6 +41,12 @@ will be stored at `$HOME/.gradle/`.
 gradle prepdev
 ```
 
+Clean up repository build files.  In rare circumstances this may be necessary after a `git pull` to
+fix unexplainable compilation errors.
+```
+gradle clean
+```
+
 Generate nested Eclipse project files which can then be imported into Eclipse as "existing 
 projects".
 ```
@@ -168,6 +174,13 @@ Xvfb :99 -nolisten tcp &
 export DISPLAY=:99
 ```
 This is required to make AWT happy.
+
+In a clean user environment, GUI startup may also block on the first-run User Agreement dialog
+before the FrontEnd becomes available. For non-interactive GUI startup in CI, set:
+```
+export JAVA_TOOL_OPTIONS="-DUSER_AGREEMENT=ACCEPT"
+```
+This allows GUI-based automation to avoid blocking on the initial agreement prompt.
 
 ## Building Supporting Data
 

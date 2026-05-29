@@ -22,7 +22,8 @@ import java.util.*;
 import org.apache.commons.lang3.StringUtils;
 
 import db.DBRecord;
-import ghidra.program.database.*;
+import ghidra.program.database.DbObject;
+import ghidra.program.database.ProgramDB;
 import ghidra.program.database.references.ReferenceDBManager;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressOutOfBoundsException;
@@ -32,6 +33,7 @@ import ghidra.program.model.mem.*;
 import ghidra.program.model.symbol.*;
 import ghidra.program.model.util.*;
 import ghidra.util.*;
+import ghidra.util.Lock.Closeable;
 import ghidra.util.exception.*;
 
 /**
@@ -42,7 +44,7 @@ import ghidra.util.exception.*;
  * The CodeUnit key should only be used for managing an object cache.  The addr field should be used within
  * this class instead of the key field.
  */
-abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorContext {
+abstract class CodeUnitDB extends DbObject implements CodeUnit, ProcessorContext {
 
 	protected CodeManager codeMgr;
 	protected Address address;
@@ -61,28 +63,21 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 	/**
 	 * Construct a new CodeUnitDB
 	 * @param codeMgr code manager that created this codeUnit.
-	 * @param cache CodeUnitDB cache
 	 * @param cacheKey the cache key (dataComponent does not use the address)
 	 * @param address min address of this code unit
 	 * @param addr index for min address
-	 * @param length the length of the codeunit.
+	 * @param length the length of the code unit.
 	 */
-	public CodeUnitDB(CodeManager codeMgr, DBObjectCache<? extends CodeUnitDB> cache, long cacheKey,
-			Address address, long addr, int length) {
-		super(cache, cacheKey);
+	CodeUnitDB(CodeManager codeMgr, long cacheKey, Address address, long addr, int length) {
+		super(cacheKey);
 		this.codeMgr = codeMgr;
 		this.address = address;
 		this.addr = addr;
 		this.length = length;
-		this.lock = codeMgr.lock;
+		this.lock = codeMgr.getLock();
 		program = (ProgramDB) codeMgr.getProgram();
 		refMgr = program.getReferenceManager();
 		programContext = program.getProgramContext();
-	}
-
-	@Override
-	protected boolean refresh() {
-		return refresh(null);
 	}
 
 	@Override
@@ -190,25 +185,24 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 	}
 
 	@Override
-	public String getComment(int commentType) {
-		lock.acquire();
-		try {
-			checkIsValid();
+	public String getComment(CommentType commentType) {
+		if (commentType == null) {
+			return null;
+		}
+		try (Closeable c = lock.read()) {
+			refreshIfNeeded();
 			if (!checkedComments) {
 				readComments();
 			}
 			if (commentRec == null) {
 				return null;
 			}
-			return commentRec.getString(commentType);
-		}
-		finally {
-			lock.release();
+			return commentRec.getString(commentType.ordinal());
 		}
 	}
 
 	@Override
-	public String[] getCommentAsArray(int commentType) {
+	public String[] getCommentAsArray(CommentType commentType) {
 		String comment = getComment(commentType);
 		return StringUtilities.toLines(comment);
 	}
@@ -247,11 +241,7 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 		SymbolTable st = codeMgr.getSymbolTable();
 		Symbol symbol = st.getPrimarySymbol(address);
 		if (symbol != null) {
-			try {
-				return symbol.getName();
-			}
-			catch (ConcurrentModificationException e) {
-			}
+			return symbol.getName();
 		}
 		return null;
 	}
@@ -293,12 +283,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
 		ObjectPropertyMap<?> pm = upm.getObjectPropertyMap(name);
 		if (pm != null) {
-			try {
-				validate(lock);
-				return pm.get(address);
-			}
-			catch (ConcurrentModificationException e) {
-			}
+			validate(lock);
+			return pm.get(address);
 		}
 		return null;
 	}
@@ -344,12 +330,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
 		StringPropertyMap pm = upm.getStringPropertyMap(name);
 		if (pm != null) {
-			try {
-				validate(lock);
-				return pm.getString(address);
-			}
-			catch (ConcurrentModificationException e) {
-			}
+			validate(lock);
+			return pm.getString(address);
 		}
 		return null;
 	}
@@ -366,12 +348,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
 		VoidPropertyMap pm = upm.getVoidPropertyMap(name);
 		if (pm != null) {
-			try {
-				validate(lock);
-				return pm.hasProperty(address);
-			}
-			catch (ConcurrentModificationException e) {
-			}
+			validate(lock);
+			return pm.hasProperty(address);
 		}
 		return false;
 	}
@@ -381,12 +359,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
 		PropertyMap<?> pm = upm.getPropertyMap(name);
 		if (pm != null) {
-			try {
-				validate(lock);
-				return pm.hasProperty(address);
-			}
-			catch (ConcurrentModificationException e) {
-			}
+			validate(lock);
+			return pm.hasProperty(address);
 		}
 		return false;
 	}
@@ -433,14 +407,14 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 				pm.remove(address);
 			}
 			catch (ConcurrentModificationException e) {
+				// ignore
 			}
 		}
 	}
 
 	@Override
-	public void setComment(int commentType, String comment) {
-		lock.acquire();
-		try {
+	public void setComment(CommentType commentType, String comment) {
+		try (Closeable c = lock.write()) {
 			checkDeleted();
 
 			if (!checkedComments) {
@@ -451,8 +425,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 					return;
 				}
 				try {
-					commentRec =
-						codeMgr.getCommentAdapter().createRecord(addr, commentType, comment);
+					commentRec = codeMgr.getCommentAdapter()
+							.createRecord(addr, commentType.ordinal(), comment);
 				}
 				catch (IOException e) {
 					codeMgr.dbError(e);
@@ -461,8 +435,8 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 				return;
 			}
 
-			String oldValue = commentRec.getString(commentType);
-			commentRec.setString(commentType, comment);
+			String oldValue = commentRec.getString(commentType.ordinal());
+			commentRec.setString(commentType.ordinal(), comment);
 			codeMgr.sendNotification(address, commentType, oldValue, comment);
 
 			for (int i = 0; i < CommentsDBAdapter.COMMENT_COL_COUNT; i++) {
@@ -479,13 +453,10 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 				codeMgr.dbError(e);
 			}
 		}
-		finally {
-			lock.release();
-		}
 	}
 
 	@Override
-	public void setCommentAsArray(int commentType, String[] comment) {
+	public void setCommentAsArray(CommentType commentType, String[] comment) {
 		setComment(commentType, StringUtils.join(comment, '\n'));
 	}
 
@@ -497,8 +468,7 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 	@Override
 	public void setProperty(String name, int value) {
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			checkDeleted();
 			IntPropertyMap pm = upm.getIntPropertyMap(name);
 
@@ -513,17 +483,13 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 			}
 			pm.add(address, value);
 		}
-		finally {
-			lock.release();
-		}
 	}
 
 	@SuppressWarnings("unchecked")
 	@Override
 	public <T extends Saveable> void setProperty(String name, T value) {
 		PropertyMapManager mgr = codeMgr.getPropertyMapManager();
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			checkDeleted();
 			ObjectPropertyMap<?> pm = mgr.getObjectPropertyMap(name);
 			if (pm == null) {
@@ -538,16 +504,12 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 			// Will throw IllegalArgumentException if map is not applicable for T
 			((ObjectPropertyMap<T>) pm).add(address, value);
 		}
-		finally {
-			lock.release();
-		}
 	}
 
 	@Override
 	public void setProperty(String name, String value) {
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			checkDeleted();
 			StringPropertyMap pm = upm.getStringPropertyMap(name);
 			if (pm == null) {
@@ -561,16 +523,12 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 			}
 			pm.add(address, value);
 		}
-		finally {
-			lock.release();
-		}
 	}
 
 	@Override
 	public void setProperty(String name) {
 		PropertyMapManager upm = codeMgr.getPropertyMapManager();
-		lock.acquire();
-		try {
+		try (Closeable c = lock.write()) {
 			checkDeleted();
 			VoidPropertyMap pm = upm.getVoidPropertyMap(name);
 			if (pm == null) {
@@ -582,9 +540,6 @@ abstract class CodeUnitDB extends DatabaseObject implements CodeUnit, ProcessorC
 				}
 			}
 			pm.add(address);
-		}
-		finally {
-			lock.release();
 		}
 	}
 

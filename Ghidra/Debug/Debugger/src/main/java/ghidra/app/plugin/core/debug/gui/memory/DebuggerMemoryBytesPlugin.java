@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-import org.jdom.Element;
+import org.jdom2.Element;
 
 import docking.action.DockingAction;
 import ghidra.app.plugin.PluginCategoryNames;
@@ -166,13 +166,13 @@ public class DebuggerMemoryBytesPlugin
 	}
 
 	@Override
-	public Object getTransientState() {
+	public ByteViewerTransientState getTransientState() {
 		// Not needed, since I'm not coordinated with ProgramManager
-		return new Object[] {};
+		return null;
 	}
 
 	@Override
-	public void restoreTransientState(Object objectState) {
+	public void restoreTransientState(ByteViewerTransientState objectState) {
 		// Not needed, since I'm not coordinated with ProgramManager
 	}
 
